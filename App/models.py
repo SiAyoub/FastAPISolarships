@@ -1,5 +1,6 @@
 import datetime
-from sqlalchemy import Column, Integer, String, ForeignKey, Text, Float, select
+import enum
+from sqlalchemy import UUID, Column, Integer, String, ForeignKey, Text, Float, select
 from passlib.context import CryptContext
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,34 +11,39 @@ from app.utils import utcnow
 from app.database import Base
 import uuid
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+class UserType(str, enum.Enum):
+        STUDENT = "student"
+        PARTNER = "partner"
 
 class User(Base):
-    __tablename__ = "users"
-    id: Mapped[uuid.UUID] = mapped_column(
-        primary_key=True, index=True, default=uuid.uuid4
-    )
-    email: Mapped[str] = mapped_column(unique=True, index=True)
-    full_name: Mapped[str]
-    password: Mapped[str]
-    is_active: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime.datetime] = mapped_column(server_default=utcnow())
-    updated_at: Mapped[datetime.datetime] = mapped_column(
-        server_default=utcnow(), server_onupdate=utcnow(), onupdate=utcnow()
-    )
+        __tablename__ = "users"
+        id: Mapped[uuid.UUID] = mapped_column(
+            primary_key=True, index=True, default=uuid.uuid4
+        )
+        email: Mapped[str] = mapped_column(unique=True, index=True)
+        full_name: Mapped[str]
+        password: Mapped[str]
+        is_active: Mapped[bool] = mapped_column(default=True)
+        created_at: Mapped[datetime.datetime] = mapped_column(server_default=utcnow())
+        updated_at: Mapped[datetime.datetime] = mapped_column(
+            server_default=utcnow(), server_onupdate=utcnow(), onupdate=utcnow()
+        )
+        user_type: Mapped[UserType] = mapped_column(default=UserType.STUDENT)
 
-    
-    @classmethod
-    async def find_by_email(cls, db: Session, email: str):
-        query = select(cls).where(cls.email == email)
-        result =  db.execute(query)
-        return result.scalar_one_or_none()
-    @classmethod
-    async def authenticate(cls, db: AsyncSession, email: str, password: str):
-        user =  await cls.find_by_email(db=db, email=email)
-        if not user or not verify_password(password, user.password):
-            return False
-        return user
+        @classmethod
+        async def find_by_email(cls, db: Session, email: str):
+            query = select(cls).where(cls.email == email)
+            result = db.execute(query)
+            return result.scalar_one_or_none()
 
+        @classmethod
+        async def authenticate(cls, db: AsyncSession, email: str, password: str):
+            user = await cls.find_by_email(db=db, email=email)
+            if not user or not verify_password(password, user.password):
+                return False
+            return user
+        student_details = relationship("Student", back_populates="user", uselist=False)
+        partner_details = relationship("Partner", back_populates="user", uselist=False)
 
 class BlackListToken(Base):
     __tablename__ = "blacklisttokens"
@@ -46,6 +52,9 @@ class BlackListToken(Base):
     )
     expire: Mapped[datetime.datetime]
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=utcnow())
+
+
+
 
     # def send_email_to_partner(self):
     #     # Logic to send email to the partner who posted the scholarship
@@ -56,3 +65,26 @@ class BlackListToken(Base):
     #         subject="New Application Received",
     #         body=f"A new application has been submitted by {self.student.user.username} for your scholarship {self.scholarship.title}."
     #     )
+class Student(Base):
+    __tablename__ = "students"
+    id: Mapped[uuid.UUID] = mapped_column(
+            primary_key=True, index=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))  # Changed to UUID
+    university = Column(String)
+    major = Column(String)
+    gpa = Column(Float)
+    user = relationship("User", back_populates="student_details")
+
+class Partner(Base):
+    __tablename__ = "partners"
+    id: Mapped[uuid.UUID] = mapped_column(
+            primary_key=True, index=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))  # Changed to UUID
+    company_name = Column(String)
+    company_address = Column(String)
+    contact_number = Column(String)
+    user = relationship("User", back_populates="partner_details")
+
+
+    
+    

@@ -1,12 +1,16 @@
-from typing import Any
+from enum import Enum
+from typing import Any, Optional
 from datetime import datetime
-from pydantic import BaseModel, UUID4, validator, EmailStr
+from uuid import UUID
+from pydantic import BaseModel, UUID4, root_validator, validator, EmailStr
 
-
+class UserTypeEnum(str, Enum):
+    student = "student"
+    partner = "partner"
 class UserBase(BaseModel):
     email: EmailStr
     full_name: str
-
+    user_type: UserTypeEnum = UserTypeEnum.student  # Default to 'student'
 
 class UserCreate(UserBase):
     password: str
@@ -27,15 +31,46 @@ class User(UserBase):
 class UserRegister(UserBase):
     password: str
     confirm_password: str
+    university: Optional[str] = None  # Only for student
+    major: Optional[str] = None       # Only for student
+    gpa: Optional[float] = None       # Only for student
+    company_name: Optional[str] = None  # Only for partner
+    company_address: Optional[str] = None  # Only for partner
+    contact_number: Optional[str] = None  # Only for partner
 
     @validator("confirm_password")
     def verify_password_match(cls, v, values, **kwargs):
         password = values.get("password")
-
         if v != password:
             raise ValueError("The two passwords did not match.")
-
         return v
+
+    @root_validator(pre=True)
+    def check_user_type_fields(cls, values):
+        user_type = values.get('user_type')
+        
+        if user_type == 'student':
+            if not values.get('university') or not values.get('major') or values.get('gpa') is None:
+                raise ValueError("For a student, university, major, and GPA must be provided.")
+        
+        if user_type == 'partner':
+            if not values.get('company_name') or not values.get('company_address') or not values.get('contact_number'):
+                raise ValueError("For a partner, company_name, company_address, and contact_number must be provided.")
+
+        return values
+# Schema for creating a student record
+class StudentCreate(BaseModel):
+    user_id: UUID
+    university: str
+    major: str
+    gpa: float
+
+# Schema for creating a partner record
+class PartnerCreate(BaseModel):
+    user_id: UUID
+    company_name: str
+    company_address: str
+    contact_number: str
 
 
 class UserLogin(BaseModel):

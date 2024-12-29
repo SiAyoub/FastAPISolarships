@@ -39,16 +39,36 @@ async def register(
 ):
     user = await models.User.find_by_email(db=db, email=data.email)
     if user:
-        raise HTTPException(status_code=400, detail="Email has already registered")
+        raise HTTPException(status_code=400, detail="Email has already been registered")
 
-    # hashing password
-    user_data = data.dict(exclude={"confirm_password"})
+    # Hash password and prepare user data
+    user_data = data.dict(exclude={"confirm_password", "university", "major", "gpa", "company_name", "company_address", "contact_number"})
     user_data["password"] = get_password_hash(user_data["password"])
+    user_data["user_type"] = data.user_type if data.user_type else "student"
 
-    # save user to db
+    # Create the user
     user = models.User(**user_data)
     user.is_active = False
     await user.save(db=db)
+
+    # Create student or partner based on the user_type
+    if user.user_type == models.UserType.STUDENT:
+        student_data = schemas.StudentCreate(user_id=user.id, university=data.university, major=data.major, gpa=data.gpa)
+        student = models.Student(**student_data.dict())
+        db.add(student)
+        db.commit()
+
+    elif user.user_type == models.UserType.PARTNER:
+        partner_data = schemas.PartnerCreate(user_id=user.id, company_name=data.company_name, company_address=data.company_address, contact_number=data.contact_number)
+        partner = models.Partner(**partner_data.dict())
+        db.add(partner)
+        db.commit()
+
+    return user
+
+
+
+
 
 
 
