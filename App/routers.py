@@ -1,7 +1,7 @@
 from typing import Annotated
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Response, Cookie
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request, Response, Cookie, logger
 from fastapi.exceptions import RequestValidationError
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,29 +56,30 @@ async def register(
     return user_schema
 
 
+from fastapi.security import OAuth2PasswordRequestForm
+
 @router.post("/login")
 async def login(
-    data: schemas.UserLogin,
     response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),  # Handles username/password and grant_type
     db: AsyncSession = Depends(get_db),
 ):
+    # Authenticate user
     user = await models.User.authenticate(
-        db=db, email=data.email, password=data.password
+        db=db, email=form_data.username, password=form_data.password
     )
 
     if not user:
-        raise BadRequestException(detail="Incorrect email or password")
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
 
-    #if not user.is_active:
-        raise ForbiddenException()
+    # Generate token pair
+    token_pair = create_token_pair(user=schemas.User.from_orm(user))
 
-    user = schemas.User.from_orm(user)
-
-    token_pair = create_token_pair(user=user)
-
+    # Add refresh token as a secure cookie
     add_refresh_token_cookie(response=response, token=token_pair.refresh.token)
 
-    return {"token": token_pair.access.token}
+    return {"access_token": token_pair.access.token, "token_type": "bearer"}
+
 
 
 @router.post("/refresh")
@@ -104,6 +105,7 @@ async def verify(token: str, db: AsyncSession = Depends(get_db)):
 @router.post("/logout", response_model=schemas.SuccessResponseScheme)
 async def logout(
     token: Annotated[str, Depends(oauth2_scheme)],
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     payload = await decode_access_token(token=token, db=db)
@@ -111,8 +113,7 @@ async def logout(
         id=payload[JTI], expire=datetime.utcfromtimestamp(payload[EXP])
     )
     await black_listed.save(db=db)
-
-    return {"msg": "Succesfully logout"}
+    return {"msg": "Successfully logged out"}
 
 
 
