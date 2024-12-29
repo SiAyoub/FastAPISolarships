@@ -165,3 +165,15 @@ class ArticleListScheme(ArticleCreateSchema):
     class Config:
         orm_mode = True
         from_attributes = True
+
+class ScholarshipCreate(BaseModel):
+    title: str
+    description: str
+
+    class Config:
+        orm_mode = True
+
+class FeedbackCreate(BaseModel):
+    scholarship_id: UUID4
+    comment: str  # Optional for comments
+    liked: bool          # Indicates whether the student liked the scholarship

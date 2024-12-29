@@ -1,15 +1,23 @@
+from asyncio.log import logger
+
 from typing import Annotated
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request, Response, Cookie, logger
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request, Response, Cookie, dependencies, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.ext.asyncio import AsyncSession
+from jose import JWTError
 
-from pydantic import ValidationError
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
+
+from pydantic import BaseModel, ValidationError
 
 from app import schemas, models
 
+from app.auth import jwt
+from app.auth.config import ALGORITHM, SECRET_KEY
 from app.auth.hash import get_password_hash, verify_password
 from app.database import get_db
 from app.auth.jwt import (
@@ -177,3 +185,100 @@ async def password_update(
     await user.save(db=db)
 
     return {"msg": "Successfully updated"}
+
+class TokenData(BaseModel):
+    user_id: str
+    user_type: str  # 'PARTNER', 'STUDENT', etc.
+
+async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+    try:
+        # Log the token right when it's received
+        logger.info(f"Received token: {token}")
+
+        payload = await jwt.decode_access_token(token, db)
+        logger.info(f"Decoded token payload: {payload}")
+        
+        user = TokenData(**payload)  # Parse user data from the token
+        logger.info(f"User data parsed from token: {user}")
+        
+        return user
+    except JWTError:
+        logger.error("Invalid token error")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+@router.post("/scholarships/")
+async def create_scholarship(
+    scholarship_data: schemas.ScholarshipCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    # Check if the current user is a partner
+    if current_user.user_type != 'partner':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to add scholarships"
+        )
+    
+    # Create the scholarship and associate it with the partner
+    partner = db.execute(
+        select(models.Partner).filter(models.Partner.user_id == current_user.user_id)
+    )
+    partner = partner.scalars().first()
+    if not partner:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Partner not found"
+        )
+    
+    scholarship = models.Scholarship(
+        title=scholarship_data.title,
+        description=scholarship_data.description,
+        partner_id=partner.id  # Associate the scholarship with the partner
+    )
+    
+    db.add(scholarship)
+    db.commit()
+    db.refresh(scholarship)
+    return scholarship
+
+@router.post("/feedback/")
+async def create_feedback(
+    feedback_data: schemas.FeedbackCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    # Fetch the student corresponding to the current user
+    student = db.execute(
+        select(models.Student).filter(models.Student.user_id == current_user.user_id)
+    )
+    student = student.scalars().first()
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found for the current user"
+        )
+
+    # Verify that the scholarship exists
+    scholarship = db.execute(
+        select(models.Scholarship).filter(models.Scholarship.id == feedback_data.scholarship_id)
+    )
+    scholarship = scholarship.scalars().first()
+    if not scholarship:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Scholarship not found"
+        )
+
+    # Create the feedback
+    feedback = models.Feedback(
+        scholarship_id=feedback_data.scholarship_id,
+        student_id=student.id,  # Use the `id` of the corresponding student
+        comment=feedback_data.comment,
+        liked=feedback_data.liked,
+        created_at=datetime.utcnow(),
+    )
+    db.add(feedback)
+    db.commit()
+    db.refresh(feedback)
+    return feedback
+

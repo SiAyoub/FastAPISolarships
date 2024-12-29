@@ -1,6 +1,6 @@
 import datetime
 import enum
-from sqlalchemy import UUID, Column, Integer, String, ForeignKey, Text, Float, select
+from sqlalchemy import UUID, Boolean, Column, DateTime, Integer, String, ForeignKey, Text, Float, select
 from passlib.context import CryptContext
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,6 +74,15 @@ class Student(Base):
     major = Column(String)
     gpa = Column(Float)
     user = relationship("User", back_populates="student_details")
+class Scholarship(Base):
+    __tablename__ = "scholarships"
+    id: Mapped[uuid.UUID] = mapped_column(
+            primary_key=True, index=True, default=uuid.uuid4)
+    title = Column(String)
+    description = Column(Text)
+    partner_id = Column(UUID(as_uuid=True), ForeignKey("partners.id"))
+    partner = relationship("Partner", back_populates="scholarship_details")
+    
 
 class Partner(Base):
     __tablename__ = "partners"
@@ -85,6 +94,15 @@ class Partner(Base):
     contact_number = Column(String)
     user = relationship("User", back_populates="partner_details")
 
+    # Use a string reference for Scholarship to resolve the class after it's defined
+    scholarship_details = relationship("Scholarship", back_populates="partner", lazy="subquery")
 
-    
+class Feedback(Base):
+    __tablename__ = "feedback"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scholarship_id = Column(UUID(as_uuid=True), ForeignKey("scholarships.id"), nullable=False)
+    student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False)
+    comment = Column(String, nullable=True)  # Optional: Comment text
+    liked = Column(Boolean, default=False)  # True if the feedback includes a like
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
