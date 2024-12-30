@@ -287,13 +287,30 @@ DISCORD_BOT_TOKEN = ""
 DISCORD_GUILD_ID = "1323194210085634110"  # Replace with your Discord server ID
 
 class Scholarship(BaseModel):
+    id: str
     title: str
 
 @router.post("/create-channel/")
-async def create_channel(scholarship: Scholarship):
+async def create_channel(
+    scholarship: Scholarship, 
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),  # Authorization handled here
+):
     """
-    Create a Discord channel for the given scholarship.
+    Create a Discord channel for a scholarship or retrieve the existing one.
     """
+    # Check if a discussion already exists for the scholarship
+    existing_discussion = db.query(models.Discussion).filter(
+        models.Discussion.scholarship_id == scholarship.id
+    ).first()
+    
+    if existing_discussion:
+        # If the channel already exists, return the link
+        channel_id = existing_discussion.channel_id
+        channel_link = f"https://discord.com/channels/{DISCORD_GUILD_ID}/{channel_id}"
+        return {"status": "Channel already exists", "channel_link": channel_link}
+    
+    # Create a new Discord channel
     url = f"https://discord.com/api/v10/guilds/{DISCORD_GUILD_ID}/channels"
     headers = {
         "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
@@ -301,14 +318,26 @@ async def create_channel(scholarship: Scholarship):
     }
     payload = {
         "name": scholarship.title.replace(" ", "-").lower(),  # Channel name
-        "type": 0,  # 0 = Text channel
+        "type": 0,  # Text channel
         "topic": f"Discussion channel for {scholarship.title}"
     }
     
     response = requests.post(url, json=payload, headers=headers)
     
     if response.status_code == 201:
+        # Save the new discussion to the database
         channel_data = response.json()
-        return {"status": "Channel created", "channel_id": channel_data["id"]}
+        new_discussion = models.Discussion(
+            user_id=current_user.user_id,  # Link the discussion to the user
+            scholarship_id=scholarship.id,  # Link the discussion to the scholarship
+            channel_id=channel_data["id"],  # Discord channel ID
+        )
+        db.add(new_discussion)
+        db.commit()
+        
+        # Return the newly created channel's link
+        channel_link = f"https://discord.com/channels/{DISCORD_GUILD_ID}/{channel_data['id']}"
+        return {"status": "Channel created", "channel_link": channel_link}
     else:
+        # Handle Discord API errors
         raise HTTPException(status_code=response.status_code, detail=response.json())

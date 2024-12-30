@@ -106,3 +106,9 @@ class Feedback(Base):
     liked = Column(Boolean, default=False)  # True if the feedback includes a like
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
+class Discussion(Base):
+    __tablename__ = "discussionsss"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(String, nullable=False, unique=True) 
+    scholarship_id = Column(String, nullable=False, unique=True)  # One discussion per scholarship
+    channel_id = Column(String, nullable=False)  # Discord channel ID
