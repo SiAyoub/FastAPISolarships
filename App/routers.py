@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 
+import requests
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -282,3 +283,32 @@ async def create_feedback(
     db.refresh(feedback)
     return feedback
 
+DISCORD_BOT_TOKEN = ""
+DISCORD_GUILD_ID = "1323194210085634110"  # Replace with your Discord server ID
+
+class Scholarship(BaseModel):
+    title: str
+
+@router.post("/create-channel/")
+async def create_channel(scholarship: Scholarship):
+    """
+    Create a Discord channel for the given scholarship.
+    """
+    url = f"https://discord.com/api/v10/guilds/{DISCORD_GUILD_ID}/channels"
+    headers = {
+        "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "name": scholarship.title.replace(" ", "-").lower(),  # Channel name
+        "type": 0,  # 0 = Text channel
+        "topic": f"Discussion channel for {scholarship.title}"
+    }
+    
+    response = requests.post(url, json=payload, headers=headers)
+    
+    if response.status_code == 201:
+        channel_data = response.json()
+        return {"status": "Channel created", "channel_id": channel_data["id"]}
+    else:
+        raise HTTPException(status_code=response.status_code, detail=response.json())
