@@ -18,8 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase
 
 from app.auth import config
-# Database URL (hardcoded for now)
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:toor@localhost/apiscolars"
+SQLALCHEMY_DATABASE_URL = "postgresql://postgres:toor@localhost/te"
 
 # Create SQLAlchemy engine
 engine = create_engine(SQLALCHEMY_DATABASE_URL, echo=True)

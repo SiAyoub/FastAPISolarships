@@ -32,11 +32,11 @@ class UserRegister(UserBase):
     password: str
     confirm_password: str
     university: Optional[str] = None  # Only for student
-    major: Optional[str] = None       # Only for student
-    gpa: Optional[float] = None       # Only for student
-    company_name: Optional[str] = None  # Only for partner
-    company_address: Optional[str] = None  # Only for partner
-    contact_number: Optional[str] = None  # Only for partner
+    username: Optional[str] = None    # Only for student
+    phone_number: Optional[str] = None  # Only for partner
+    website: Optional[str] = None     # Only for partner
+    address: Optional[str] = None     # Only for partner
+    country: Optional[str] = None     # Only for partner
 
     @validator("confirm_password")
     def verify_password_match(cls, v, values, **kwargs):
@@ -50,28 +50,28 @@ class UserRegister(UserBase):
         user_type = values.get('user_type')
         
         if user_type == 'student':
-            if not values.get('university') or not values.get('major') or values.get('gpa') is None:
-                raise ValueError("For a student, university, major, and GPA must be provided.")
+            if not values.get('university') or not values.get('username'):
+                raise ValueError("For a student, university and username must be provided.")
         
         if user_type == 'partner':
-            if not values.get('company_name') or not values.get('company_address') or not values.get('contact_number'):
-                raise ValueError("For a partner, company_name, company_address, and contact_number must be provided.")
+            if not values.get('phone_number') or not values.get('website') or not values.get('address') or not values.get('country'):
+                raise ValueError("For a partner, phone_number, website, address, and country must be provided.")
 
         return values
+
 # Schema for creating a student record
 class StudentCreate(BaseModel):
     user_id: UUID
     university: str
-    major: str
-    gpa: float
+    username: str
 
 # Schema for creating a partner record
 class PartnerCreate(BaseModel):
     user_id: UUID
-    company_name: str
-    company_address: str
-    contact_number: str
-
+    phone_number: str
+    website: str
+    address: str
+    country: str
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -169,6 +169,14 @@ class ArticleListScheme(ArticleCreateSchema):
 class ScholarshipCreate(BaseModel):
     title: str
     description: str
+    location: str
+    application_link: str
+    field_of_study: str
+    funding_type: str
+    funding_amount: float
+    duration: int
+    status: str = "open"
+    
 
     class Config:
         orm_mode = True
@@ -178,3 +186,17 @@ class FeedbackCreate(BaseModel):
     comment: str  # Optional for comments
     liked: bool          # Indicates whether the student liked the scholarship
 
+class Scholarship(BaseModel):
+    id: UUID4
+    title: str
+    description: str
+    location: str
+    application_link: str
+    field_of_study: str
+    funding_type: str
+    funding_amount: float
+    duration: int
+    status: str = "open"
+
+    class Config:
+        orm_mode = True

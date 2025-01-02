@@ -1,9 +1,9 @@
 from asyncio.log import logger
 
-from typing import Annotated
+from typing import Annotated, List
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request, Response, Cookie, dependencies, status
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request, Response, Cookie, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
@@ -13,25 +13,23 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from pydantic import BaseModel, ValidationError
+from pydantic import UUID4, BaseModel, ValidationError
 
 from app import schemas, models
 
 from app.auth import jwt
-from app.auth.config import ALGORITHM, SECRET_KEY
 from app.auth.hash import get_password_hash, verify_password
 from app.database import get_db
 from app.auth.jwt import (
     create_token_pair,
     refresh_token_state,
     decode_access_token,
-    mail_token,
     add_refresh_token_cookie,
     SUB,
     JTI,
     EXP,
 )
-from app.exceptions import BadRequestException, NotFoundException, ForbiddenException
+from app.exceptions import BadRequestException, NotFoundException
 
 
 
@@ -51,7 +49,7 @@ async def register(
         raise HTTPException(status_code=400, detail="Email has already been registered")
 
     # Hash password and prepare user data
-    user_data = data.dict(exclude={"confirm_password", "university", "major", "gpa", "company_name", "company_address", "contact_number"})
+    user_data = data.dict(exclude={"confirm_password", "university", "username", "phone_number", "website", "address", "country"})
     user_data["password"] = get_password_hash(user_data["password"])
     user_data["user_type"] = data.user_type if data.user_type else "student"
 
@@ -62,27 +60,18 @@ async def register(
 
     # Create student or partner based on the user_type
     if user.user_type == models.UserType.STUDENT:
-        student_data = schemas.StudentCreate(user_id=user.id, university=data.university, major=data.major, gpa=data.gpa)
+        student_data = schemas.StudentCreate(user_id=user.id, university=data.university, username=data.username)
         student = models.Student(**student_data.dict())
         db.add(student)
         db.commit()
 
     elif user.user_type == models.UserType.PARTNER:
-        partner_data = schemas.PartnerCreate(user_id=user.id, company_name=data.company_name, company_address=data.company_address, contact_number=data.contact_number)
+        partner_data = schemas.PartnerCreate(user_id=user.id, phone_number=data.phone_number, website=data.website, address=data.address, country=data.country)
         partner = models.Partner(**partner_data.dict())
         db.add(partner)
         db.commit()
 
-    return user
-
-
-
-
-
-
-
-    user_schema = schemas.User.from_orm(user)
-    return user_schema
+    return schemas.User.from_orm(user)
 
 
 from fastapi.security import OAuth2PasswordRequestForm
@@ -234,6 +223,13 @@ async def create_scholarship(
     scholarship = models.Scholarship(
         title=scholarship_data.title,
         description=scholarship_data.description,
+        location=scholarship_data.location,
+        application_link=scholarship_data.application_link,
+        field_of_study=scholarship_data.field_of_study,
+        funding_type=scholarship_data.funding_type,
+        funding_amount=scholarship_data.funding_amount,
+        duration=scholarship_data.duration,
+        status=scholarship_data.status,
         partner_id=partner.id  # Associate the scholarship with the partner
     )
     
@@ -341,3 +337,64 @@ async def create_channel(
     else:
         # Handle Discord API errors
         raise HTTPException(status_code=response.status_code, detail=response.json())
+
+
+@router.get("/api/scholarships")
+async def get_scholarships(db: AsyncSession = Depends(get_db)):
+    try:
+        result = db.execute(select(models.Scholarship))
+        scholarships = result.scalars().all()
+        return scholarships
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/scholarship/{id}", response_model=schemas.Scholarship)
+async def get_scholarship(id: UUID4, db: AsyncSession = Depends(get_db)):
+    scholarship = await db.execute(select(models.Scholarship).filter(models.Scholarship.id == id))
+    scholarship = scholarship.scalars().first()
+    if not scholarship:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found")
+    return scholarship
+
+
+@router.get("/api/scholarship/filters", response_model=List[schemas.Scholarship])
+async def get_scholarships_by_filters(
+    location: str = None,
+    field_of_study: str = None,
+    funding_type: str = None,
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(models.Scholarship)
+    if location:
+        query = query.filter(models.Scholarship.location == location)
+    if field_of_study:
+        query = query.filter(models.Scholarship.field_of_study == field_of_study)
+    if funding_type:
+        query = query.filter(models.Scholarship.funding_type == funding_type)
+    
+    scholarships = await db.execute(query)
+    return scholarships.scalars().all()
+
+
+@router.put("/api/scholarship/{id}", response_model=schemas.ScholarshipCreate)
+async def update_scholarship(
+    id: UUID4,
+    scholarship_data: schemas.ScholarshipCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user)
+):
+    scholarship = await db.execute(select(models.Scholarship).filter(models.Scholarship.id == id))
+    scholarship = scholarship.scalars().first()
+    if not scholarship:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found")
+
+    if current_user.user_type != 'partner' or scholarship.partner_id != current_user.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to update this scholarship")
+
+    for key, value in scholarship_data.dict(exclude_unset=True).items():
+        setattr(scholarship, key, value)
+
+    await db.commit()
+    await db.refresh(scholarship)
+    return scholarship

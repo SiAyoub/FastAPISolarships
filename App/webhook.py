@@ -6,7 +6,7 @@ import aiohttp
 async def anything(url):
     async with aiohttp.ClientSession() as session:
         webhook = Webhook.from_url(url, session=session)
-        embed = discord.Embed(title="This is from a webhook!")
+        embed = discord.Embed(title="This is from a weghhhhhhhhhhhhhhbhook!")
         await webhook.send(embed=embed, username="stud", avatar_url="https://i.imgur.com/555.png")
         
 if __name__ == "__main__":

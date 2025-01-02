@@ -71,8 +71,7 @@ class Student(Base):
             primary_key=True, index=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))  # Changed to UUID
     university = Column(String)
-    major = Column(String)
-    gpa = Column(Float)
+    username = Column(String)
     user = relationship("User", back_populates="student_details")
 class Scholarship(Base):
     __tablename__ = "scholarships"
@@ -80,8 +79,17 @@ class Scholarship(Base):
             primary_key=True, index=True, default=uuid.uuid4)
     title = Column(String)
     description = Column(Text)
+    location = Column(String)
+    application_link = Column(String)
+    field_of_study = Column(String)
+    funding_type = Column(String)
+    funding_amount = Column(Float)
+    duration = Column(Integer)
+    status = Column(String, default="open")
+
     partner_id = Column(UUID(as_uuid=True), ForeignKey("partners.id"))
     partner = relationship("Partner", back_populates="scholarship_details")
+
     
 
 class Partner(Base):
@@ -89,9 +97,10 @@ class Partner(Base):
     id: Mapped[uuid.UUID] = mapped_column(
             primary_key=True, index=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))  # Changed to UUID
-    company_name = Column(String)
-    company_address = Column(String)
-    contact_number = Column(String)
+    phone_number = Column(String)
+    website = Column(String)
+    address = Column(String)
+    country = Column(String)
     user = relationship("User", back_populates="partner_details")
 
     # Use a string reference for Scholarship to resolve the class after it's defined
