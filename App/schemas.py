@@ -184,7 +184,7 @@ class ScholarshipCreate(BaseModel):
 class FeedbackCreate(BaseModel):
     scholarship_id: UUID4
     comment: str  # Optional for comments
-    liked: bool          # Indicates whether the student liked the scholarship
+    # Indicates whether the student liked the scholarship
 
 class Scholarship(BaseModel):
     id: UUID4

@@ -106,14 +106,32 @@ class Partner(Base):
     # Use a string reference for Scholarship to resolve the class after it's defined
     scholarship_details = relationship("Scholarship", back_populates="partner", lazy="subquery")
 
+
 class Feedback(Base):
     __tablename__ = "feedback"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     scholarship_id = Column(UUID(as_uuid=True), ForeignKey("scholarships.id"), nullable=False)
     student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False)
-    comment = Column(String, nullable=True)  # Optional: Comment text
-    liked = Column(Boolean, default=False)  # True if the feedback includes a like
+    comment = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    likes_count = Column(Integer, default=0)
+
+    # Define the relationship
+    likes = relationship("Likes", back_populates="feedback")
+
+
+
+class Likes(Base):
+    __tablename__ = "likes"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    feedback_id = Column(UUID(as_uuid=True), ForeignKey("feedback.id"), nullable=False)
+
+    student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    feedback = relationship("Feedback", back_populates="likes")
+
+
     
 class Discussion(Base):
     __tablename__ = "discussionsss"

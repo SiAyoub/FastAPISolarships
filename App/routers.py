@@ -9,7 +9,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 
 import requests
-from sqlalchemy import UUID, select
+from sqlalchemy import UUID, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -271,13 +271,69 @@ async def create_feedback(
         scholarship_id=feedback_data.scholarship_id,
         student_id=student.id,  # Use the `id` of the corresponding student
         comment=feedback_data.comment,
-        liked=feedback_data.liked,
+        likes_count=0,
         created_at=datetime.utcnow(),
     )
     db.add(feedback)
     db.commit()
     db.refresh(feedback)
     return feedback
+@router.post("/feedback/{feedback_id}/like")
+async def add_like(
+    feedback_id: UUID4,
+    db: AsyncSession = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    # Check if the feedback exists
+    feedback_query = db.execute(
+        select(models.Feedback).filter(models.Feedback.id == feedback_id)
+    )
+    feedback = feedback_query.scalars().first()
+    if not feedback:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Feedback not found"
+        )
+
+    # Fetch the student corresponding to the current user
+    student_query = db.execute(
+        select(models.Student).filter(models.Student.user_id == current_user.user_id)
+    )
+    student = student_query.scalars().first()
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found for the current user"
+        )
+
+    # Check if the student has already liked this feedback
+    like_query = db.execute(
+        select(models.Likes).filter(
+            models.Likes.feedback_id == feedback_id,
+            models.Likes.student_id == student.id,
+        )
+    )
+    existing_like = like_query.scalars().first()
+    if existing_like:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You have already liked this feedback"
+        )
+
+    # Add the like
+    like = models.Likes(
+        feedback_id=feedback_id,
+        student_id=student.id
+    )
+    db.add(like)
+
+    # Increment the likes_count
+    feedback.likes_count += 1
+    db.commit()
+    db.refresh(feedback)
+
+    return {"message": "Like added successfully", "likes_count": feedback.likes_count}
+
 
 DISCORD_BOT_TOKEN = ""
 DISCORD_GUILD_ID = "1323194210085634110"  # Replace with your Discord server ID
@@ -348,6 +404,15 @@ async def get_scholarships(db: AsyncSession = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/api/feedbacks")
+async def get_feedback(db: AsyncSession = Depends(get_db)):
+    try:
+        result = db.execute(select(models.Feedback))
+        scholarships = result.scalars().all()
+        return scholarships
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/api/scholarship/filters")
 async def get_scholarships_by_filters(
@@ -375,7 +440,48 @@ async def get_scholarship(id: UUID4, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found")
     return scholarship
 
+@router.get("/api/feedback/{id}")
+async def get_feedback(id: UUID4, db: AsyncSession = Depends(get_db)):
+    feedback =  db.execute(select(models.Feedback).filter(models.Feedback.id == id))
+    feedback = feedback.scalars().first()
+    if not feedback:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found")
+    return feedback
 
+@router.get("/api/reviews/top-feedback")
+async def get_feedback_with_highest_likes(db: AsyncSession = Depends(get_db)):
+    # Query to get the feedback with the highest like_count
+    feedback_query = db.execute(
+        select(models.Feedback)
+        .order_by(models.Feedback.likes_count.desc())  # Order by like_count in descending order
+    )
+    
+    # Fetch the feedback with the highest like count
+    feedback = feedback_query.scalars().first()
+    
+    if not feedback:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No feedback found")
+    
+    # Return the feedback
+    return feedback
+
+@router.delete("/api/deletefeedback/{id}")
+async def delete_feedback(id: UUID4, db: AsyncSession = Depends(get_db)):
+    # Fetch the feedback record by id
+    feedback = db.execute(select(models.Feedback).filter(models.Feedback.id == id))
+    feedback = feedback.scalars().first()
+    
+    if not feedback:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feedback not found")
+
+    # Delete the associated likes first if necessary
+    db.execute(delete(models.Likes).filter(models.Likes.feedback_id == id))
+    
+    # Delete the feedback record
+    db.delete(feedback)
+    db.commit()  # Commit the transaction
+    
+    return {"message": "Feedback deleted successfully"}
 
 
 @router.put("/api/scholarship/{id}", response_model=schemas.ScholarshipCreate)
