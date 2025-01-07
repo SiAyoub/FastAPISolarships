@@ -73,6 +73,8 @@ class Student(Base):
     university = Column(String)
     username = Column(String)
     user = relationship("User", back_populates="student_details")
+    interested = Column(String, nullable=True, unique=True, default="")
+
 class Scholarship(Base):
     __tablename__ = "scholarships"
     id: Mapped[uuid.UUID] = mapped_column(

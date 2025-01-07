@@ -35,7 +35,7 @@ except Exception as error:
     print("Error:", error)
 
 # Database URL and engine setup
-DATABASE_URL = "postgresql://postgres:toor@localhost/fixes"
+DATABASE_URL = "postgresql://postgres:toor@localhost/final"
 engine = create_engine(DATABASE_URL, echo=True)
 
 # Ensure models are created

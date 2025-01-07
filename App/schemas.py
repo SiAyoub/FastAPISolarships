@@ -64,6 +64,7 @@ class StudentCreate(BaseModel):
     user_id: UUID
     university: str
     username: str
+    
 
 # Schema for creating a partner record
 class PartnerCreate(BaseModel):

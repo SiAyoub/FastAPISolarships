@@ -440,6 +440,14 @@ async def get_scholarship(id: UUID4, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found")
     return scholarship
 
+@router.get("/api/discord/{shcolarshipid}")
+async def get_scholarship(shcolarshipid: str, db: AsyncSession = Depends(get_db)):
+    discussion =  db.execute(select(models.Discussion).filter(models.Discussion.scholarship_id == shcolarshipid))
+    discussion = discussion.scalars().first()
+    if not discussion:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found")
+    return discussion
+
 @router.get("/api/feedback/{id}")
 async def get_feedback(id: UUID4, db: AsyncSession = Depends(get_db)):
     feedback =  db.execute(select(models.Feedback).filter(models.Feedback.id == id))
@@ -505,3 +513,28 @@ async def update_scholarship(
     db.commit()
     db.refresh(scholarship)
     return scholarship
+
+
+@router.post("/scholarship/interested/{scholarship_id}")
+async def add_interest(
+    scholarship_id: str,  # the scholarship ID to mark interest for
+    db: AsyncSession = Depends(get_db),  # Dependency to get the database session
+    current_user: TokenData = Depends(get_current_user),  # Current user from the JWT token
+):
+    # Retrieve the student using the student_id from the current user
+    student = db.execute(select(models.Student).filter(models.Student.user_id == current_user.user_id))
+    student = student.scalars().first()
+
+    if not student:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
+
+   
+
+    student.interested = scholarship_id
+
+    
+  
+
+    db.commit()
+
+    return {"message": "Interest successfully marked"}
