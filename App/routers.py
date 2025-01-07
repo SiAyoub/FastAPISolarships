@@ -9,7 +9,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 
 import requests
-from sqlalchemy import select
+from sqlalchemy import UUID, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -349,16 +349,7 @@ async def get_scholarships(db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/api/scholarship/{id}", response_model=schemas.Scholarship)
-async def get_scholarship(id: UUID4, db: AsyncSession = Depends(get_db)):
-    scholarship = await db.execute(select(models.Scholarship).filter(models.Scholarship.id == id))
-    scholarship = scholarship.scalars().first()
-    if not scholarship:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found")
-    return scholarship
-
-
-@router.get("/api/scholarship/filters", response_model=List[schemas.Scholarship])
+@router.get("/api/scholarship/filters")
 async def get_scholarships_by_filters(
     location: str = None,
     field_of_study: str = None,
@@ -373,8 +364,18 @@ async def get_scholarships_by_filters(
     if funding_type:
         query = query.filter(models.Scholarship.funding_type == funding_type)
     
-    scholarships = await db.execute(query)
+    scholarships =  db.execute(query)
     return scholarships.scalars().all()
+
+@router.get("/api/scholarship/{id}")
+async def get_scholarship(id: UUID4, db: AsyncSession = Depends(get_db)):
+    scholarship =  db.execute(select(models.Scholarship).filter(models.Scholarship.id == id))
+    scholarship = scholarship.scalars().first()
+    if not scholarship:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found")
+    return scholarship
+
+
 
 
 @router.put("/api/scholarship/{id}", response_model=schemas.ScholarshipCreate)
@@ -384,17 +385,17 @@ async def update_scholarship(
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_user)
 ):
-    scholarship = await db.execute(select(models.Scholarship).filter(models.Scholarship.id == id))
+    scholarship =  db.execute(select(models.Scholarship).filter(models.Scholarship.id == id))
     scholarship = scholarship.scalars().first()
     if not scholarship:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found")
 
-    if current_user.user_type != 'partner' or scholarship.partner_id != current_user.user_id:
+    if current_user.user_type != 'partner' :
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to update this scholarship")
 
     for key, value in scholarship_data.dict(exclude_unset=True).items():
         setattr(scholarship, key, value)
 
-    await db.commit()
-    await db.refresh(scholarship)
+    db.commit()
+    db.refresh(scholarship)
     return scholarship
